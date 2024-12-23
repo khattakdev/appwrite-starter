@@ -10,6 +10,106 @@ export default async ({ req, res, log }) => {
     .setProject(PROJECT_ID)
     .setJWT(req.headers['authorization']);
   const databases = new Databases(client);
+
+  function createOperation(added, table) {
+    return Promise.all(
+      added.map(async (record) => {
+        const { $PhantomId, ...data } = record;
+        let id;
+        if (table === 'tasks') {
+          id = await addTask(data);
+        }
+        if (table === 'dependencies') {
+          id = await addDependency(data);
+        }
+        // Report to the client that the record identifier has been changed
+        return { $PhantomId, id };
+      })
+    );
+  }
+
+  function deleteOperation(deleted, table) {
+    return Promise.all(
+      deleted.map(({ id }) => {
+        if (table === 'tasks') {
+          removeTask(id);
+        }
+        if (table === 'dependencies') {
+          removeDependency(id);
+        }
+      })
+    );
+  }
+
+  function updateOperation(updated, table) {
+    return Promise.all(
+      updated.map(({ $PhantomId, id, ...data }) => {
+        if (table === 'tasks') {
+          updateTask(id, data);
+        }
+        if (table === 'dependencies') {
+          updateDependency(id, data);
+        }
+      })
+    );
+  }
+
+  async function addTask(task) {
+    const { $id } = await databases.createDocument(
+      DATABASE_ID,
+      TASKS_COLLECTION_ID,
+      ID.unique(),
+      task
+    );
+    return $id;
+  }
+  async function addDependency(dependency) {
+    dependency.type = `${dependency.type}`;
+    delete dependency.from;
+    delete dependency.to;
+    const { $id } = await databases.createDocument(
+      DATABASE_ID,
+      DEPENDENCIES_COLLECTION_ID,
+      ID.unique(),
+      dependency
+    );
+    return $id;
+  }
+
+  async function removeTask(id) {
+    await databases.deleteDocument(DATABASE_ID, TASKS_COLLECTION_ID, id);
+  }
+  async function removeDependency(id) {
+    await databases.deleteDocument(DATABASE_ID, DEPENDENCIES_COLLECTION_ID, id);
+  }
+
+  async function updateTask(id, task) {
+    await databases.updateDocument(DATABASE_ID, TASKS_COLLECTION_ID, id, task);
+  }
+  async function updateDependency(id, dependency) {
+    await databases.updateDocument(
+      DATABASE_ID,
+      DEPENDENCIES_COLLECTION_ID,
+      id,
+      dependency
+    );
+  }
+
+  async function applyTableChanges(table, changes) {
+    let rows;
+    if (changes.added) {
+      rows = await createOperation(changes.added, table);
+    }
+    if (changes.removed) {
+      await deleteOperation(changes.removed, table);
+    }
+    if (changes.updated) {
+      await updateOperation(changes.updated, table);
+    }
+    // New task or dependency ids to send to the client.
+    return rows;
+  }
+
   // The Appwrite function code in the next sections goes here
   if (req.method === 'OPTIONS') {
     return res.send('', 200, {
@@ -81,18 +181,19 @@ export default async ({ req, res, log }) => {
 
   if (req.method === 'POST') {
     const { requestId, tasks, dependencies } = req.body;
-    log('Tasks and Dependencies from Body ');
     try {
+      log('Before Response');
       const response = { requestId, success: true };
+      log(response);
       // If task changes are passed.
       if (tasks) {
+        log('Before ApplyTableChanges');
         const rows = await applyTableChanges('tasks', tasks);
         // If there is new data to update the client.
         if (rows) {
           response.tasks = { rows };
         }
       }
-      log('Tasks Apply ', response.tasks);
       // If dependency changes are passed.
       if (dependencies) {
         const rows = await applyTableChanges('dependencies', dependencies);
@@ -101,7 +202,6 @@ export default async ({ req, res, log }) => {
           response.dependencies = { rows };
         }
       }
-      log('Dependencies Apply ', response.dependencies);
       return res.json(response, 200, {
         'Access-Control-Allow-Origin': 'http://localhost:3000',
       });
@@ -120,25 +220,6 @@ export default async ({ req, res, log }) => {
     }
   }
 };
-
-async function applyTableChanges(table, changes, log) {
-  let rows;
-  log('Inside ApplyTableChange');
-  if (changes.added) {
-    log('Inside ApplyTableChange - ADDED');
-    rows = await createOperation(changes.added, table);
-  }
-  if (changes.removed) {
-    log('Inside ApplyTableChange - REMOVED');
-    await deleteOperation(changes.removed, table);
-  }
-  if (changes.updated) {
-    log('Inside ApplyTableChange - UPDATED');
-    await updateOperation(changes.updated, table);
-  }
-  // New task or dependency ids to send to the client.
-  return rows;
-}
 
 function createOperation(added, table) {
   return Promise.all(
