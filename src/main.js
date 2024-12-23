@@ -4,7 +4,7 @@ const PROJECT_ID = process.env.PROJECT_ID,
   TASKS_COLLECTION_ID = process.env.TASKS_COLLECTION_ID,
   DEPENDENCIES_COLLECTION_ID = process.env.DEPENDENCIES_COLLECTION_ID;
 
-export default async ({ req, res }) => {
+export default async ({ req, res, log }) => {
   const client = new Client()
     .setEndpoint('https://cloud.appwrite.io/v1')
     .setProject(PROJECT_ID)
@@ -81,6 +81,7 @@ export default async ({ req, res }) => {
 
   if (req.method === 'POST') {
     const { requestId, tasks, dependencies } = req.body;
+    log('Tasks and Dependencies from Body ', tasks, dependencies);
     try {
       const response = { requestId, success: true };
       // If task changes are passed.
@@ -91,6 +92,7 @@ export default async ({ req, res }) => {
           response.tasks = { rows };
         }
       }
+      log('Tasks Apply ', response.tasks);
       // If dependency changes are passed.
       if (dependencies) {
         const rows = await applyTableChanges('dependencies', dependencies);
@@ -99,6 +101,7 @@ export default async ({ req, res }) => {
           response.dependencies = { rows };
         }
       }
+      log('Dependencies Apply ', response.dependencies);
       return res.json(response, 200, {
         'Access-Control-Allow-Origin': 'http://localhost:3000',
       });
