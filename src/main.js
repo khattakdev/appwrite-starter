@@ -81,7 +81,7 @@ export default async ({ req, res, log }) => {
 
   if (req.method === 'POST') {
     const { requestId, tasks, dependencies } = req.body;
-    log('Tasks and Dependencies from Body ', tasks, dependencies);
+    log('Tasks and Dependencies from Body ');
     try {
       const response = { requestId, success: true };
       // If task changes are passed.
@@ -121,15 +121,19 @@ export default async ({ req, res, log }) => {
   }
 };
 
-async function applyTableChanges(table, changes) {
+async function applyTableChanges(table, changes, log) {
   let rows;
+  log('Inside ApplyTableChange');
   if (changes.added) {
+    log('Inside ApplyTableChange - ADDED');
     rows = await createOperation(changes.added, table);
   }
   if (changes.removed) {
+    log('Inside ApplyTableChange - REMOVED');
     await deleteOperation(changes.removed, table);
   }
   if (changes.updated) {
+    log('Inside ApplyTableChange - UPDATED');
     await updateOperation(changes.updated, table);
   }
   // New task or dependency ids to send to the client.
